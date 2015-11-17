@@ -68,7 +68,21 @@
       (push (cons run-size left-cap) runs))
     (nreverse runs)))
 
-(defun possible-rows (size constraint)
+(defun memoize (func)
+  (let ((table (make-hash-table :test #'equal)))
+    (lambda (&rest args)
+      (multiple-value-bind (result found) (gethash args table)
+        (if found
+            result
+            (setf (gethash args table)
+                  (apply func args)))))))
+
+(defmacro defun-memoized (func-name lambda-list &body body)
+  `(setf (fdefinition ',func-name)
+         (memoize (lambda ,lambda-list
+                    ,@body))))
+
+(defun-memoized possible-rows (size constraint)
   (defun possibilities-padded (size constraint) ; call with size + 1, one padding mandatory
     (cond
       ((minusp size) nil)
@@ -83,7 +97,7 @@
                         suffixes)))))
   (mapcar #'cdr (possibilities-padded (1+ size) constraint))) ; remove initial padding
 
-(defun get-complete-runs (line end)
+(defun-memoized get-complete-runs (line end)
   (let (runs (run-size 0))
     (dolist (cell (subseq line 0 end))
       (ecase cell
@@ -102,7 +116,7 @@
           (push run-size runs)))
     (nreverse runs)))
 
-(defun constraint-match-prefix-p (line constraint end)
+(defun-memoized constraint-match-prefix-p (line constraint end)
   (let ((runs (get-complete-runs line end)))
     (and (>= (length constraint) (length runs))
          (equal (subseq constraint 0 (length runs))
