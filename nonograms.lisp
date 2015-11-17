@@ -4,16 +4,21 @@
 
 ;;; FIXME add pruning to solve-puzzle
 ;;; FIXME set package
+;;; TODO add constraints to puzzle printout
 
 (defclass puzzle ()
   ((height :reader height :initarg :height :documentation "number of rows"
-           :initform (error "must specify height"))
+           :initform (error "must specify height")
+           :type 'fixnum)
    (width :reader width :initarg :width :documentation "number of columns"
-          :initform (error "must specify width"))
+          :initform (error "must specify width")
+          :type 'fixnum)
    (cells :accessor cells :documentation "array of cells"
-          :type '(array (or (eql :unknown) (eql :black) (eql :white)) 2))
-   (horiz :accessor horiz :documentation "horizonal constraints")
-   (verti :accessor verti :documentation "vertical constraints")))
+          :type '(simple-array (or (eql :unknown) (eql :black) (eql :white)) 2))
+   (horiz :accessor horiz :documentation "horizonal constraints"
+          :type '(simple-array list))
+   (verti :accessor verti :documentation "vertical constraints"
+          :type '(simple-array list))))
 
 (defmethod initialize-instance :after ((puzzle puzzle) &key)
   (setf (cells puzzle)
@@ -78,6 +83,30 @@
                         suffixes)))))
   (mapcar #'cdr (possibilities-padded (1+ size) constraint))) ; remove initial padding
 
+(defun get-complete-runs (line end)
+  (let (runs (run-size 0))
+    (dolist (cell (subseq line 0 end))
+      (ecase cell
+        (:black
+         (incf run-size))
+        (:white
+         (when (plusp run-size)
+           (push run-size runs)
+           (setf run-size 0)))
+        (:unknown
+         (error "Can only call get-complete-runs on known lines"))))
+    (if (< end (length line))
+        (when (eql :white (nth end line))
+          (push run-size runs))
+        (push run-size runs))
+    (nreverse runs)))
+
+(defun constraint-match-prefix-p (line constraint end)
+  (let ((runs (get-complete-runs line end)))
+    (and (>= (length constraint) (length runs))
+         (equal (subseq constraint 0 (length runs))
+                runs))))
+
 (defun constraint-match-p (line constraint)
   (equal
    constraint
@@ -95,6 +124,14 @@
      (when (plusp run-size)
        (push run-size runs))
      (nreverse runs))))
+
+(defun puzzle-prefix-ok-p (puzzle rows)
+  (loop
+     for j below (width puzzle)
+     for line = (get-col puzzle j)
+     if (not (constraint-match-prefix-p line (svref (verti puzzle) j) rows))
+     return nil
+     finally (return t)))
 
 (defun puzzle-ok-p (puzzle)
   (loop
@@ -118,7 +155,8 @@
                    for j below (width puzzle)
                    for cell in candidate
                    do (setf (aref (cells puzzle) row j) cell))
-             if (solve-aux (1+ row))
+             if (and (puzzle-prefix-ok-p puzzle (1+ row))
+                     (solve-aux (1+ row)))
              do (return-from solve-aux puzzle))
           (loop for j below (width puzzle)
              for cell in original-row
@@ -132,6 +170,7 @@
   (and (puzzle-ok-p puzzle) puzzle))
 
 (defmethod print-object ((puzzle puzzle) stream)
+  (fresh-line stream)
   (loop repeat (1- (* 2 (width puzzle)))
      do (princ #\- stream))
   (terpri stream)
