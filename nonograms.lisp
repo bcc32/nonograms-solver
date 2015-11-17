@@ -95,10 +95,11 @@
            (setf run-size 0)))
         (:unknown
          (error "Can only call get-complete-runs on known lines"))))
-    (if (< end (length line))
-        (when (eql :white (nth end line))
-          (push run-size runs))
-        (push run-size runs))
+    (when (plusp run-size)
+      (if (< end (length line))
+          (when (eql :white (nth end line))
+            (push run-size runs))
+          (push run-size runs)))
     (nreverse runs)))
 
 (defun constraint-match-prefix-p (line constraint end)
